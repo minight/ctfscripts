@@ -1,0 +1,7 @@
+- defaults:
+    link:
+      relink: true
+
+- link:
+    /usr/local/lib/python2.7/site-packages/ppp.py: 'scripts/pwnpwnpwn.py'
+    /usr/local/lib/python3.6/site-packages/ppp.py: 'scripts/pwnpwnpwn.py'
