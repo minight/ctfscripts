@@ -1,7 +1,12 @@
 - defaults:
     link:
       relink: true
+      create: true
 
 - link:
     /usr/local/lib/python2.7/site-packages/ppp.py: 'scripts/pwnpwnpwn.py'
     /usr/local/lib/python3.6/site-packages/ppp.py: 'scripts/pwnpwnpwn.py'
+    ~/.ipython/profile_ctf/ipython_config.py: 'scripts/ipython_config.py'
+
+- shell:
+    - pip install pwn ipython
